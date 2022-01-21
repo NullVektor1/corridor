@@ -18,8 +18,9 @@
 	<body>
 
 		<div id="info">
-			<a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> - voxel painter - webgl<br>
-			<strong>click</strong>: add voxel, <strong>shift + click</strong>: remove voxel
+			<h1>The Corridor </h1>
+			<h3>by Oszi</h3>
+			<strong>click</strong>: add wall, <strong>shift + click</strong>: remove wall
 		</div>
 
 		<script type="module">
@@ -28,9 +29,9 @@
 
 			let camera, scene, renderer;
 			let plane;
-			let pointer, raycaster, isShiftDown = false;
+			let pointer, raycaster, isRotated ,isShiftDown = false;
 
-			let rollOverMesh, rollOverMaterial;
+			let rollOverGeo, rollOverMesh, rollOverMaterial;
 			let cubeGeo, cubeMaterial;
 
 			const objects = [];
@@ -49,9 +50,10 @@
 
 				// roll-over helpers
 
-				const rollOverGeo = new THREE.BoxGeometry( 200, 50, 50 );
-				//console.log(rollOverGeo)
+				rollOverGeo = new THREE.BoxGeometry( 200, 50, 50 );
+				//Set the geometric center of the wall
 				rollOverGeo.translate(25, 0, 0)
+
 				rollOverMaterial = new THREE.MeshBasicMaterial( { color: 0xff0000, opacity: 0.5, transparent: true } );
 				rollOverMesh = new THREE.Mesh( rollOverGeo, rollOverMaterial );
 				scene.add( rollOverMesh );
@@ -166,11 +168,21 @@
 
 						// create cube
 
-					} else {
+					} else if(isRotated){
+						const voxel = new THREE.Mesh( cubeGeo, cubeMaterial );
+						voxel.rotateY(-(Math.PI/2))
+						voxel.position.copy( intersect.point ).add( intersect.face.normal );
+						voxel.position.divideScalar( 50 ).floor().multiplyScalar( 50 ).addScalar( 25 );
+						scene.add( voxel );
+
+						objects.push( voxel );
+
+					}
+					
+					else {
 
 						const voxel = new THREE.Mesh( cubeGeo, cubeMaterial );
 						voxel.position.copy( intersect.point ).add( intersect.face.normal );
-						console.log(voxel)
 						voxel.position.divideScalar( 50 ).floor().multiplyScalar( 50 ).addScalar( 25 );
 						scene.add( voxel );
 
@@ -189,6 +201,18 @@
 				switch ( event.keyCode ) {
 
 					case 16: isShiftDown = true; break;
+					//R key detection to rotate
+					case 82: if(isRotated){
+								console.log(rollOverMesh.rotation);
+								rollOverMesh.rotateY(Math.PI/2);
+								isRotated = false;
+								}
+							else{
+								isRotated = true;
+								rollOverMesh.rotateY(-(Math.PI/2))
+							}
+							render();
+							break;
 
 				}
 
@@ -199,6 +223,7 @@
 				switch ( event.keyCode ) {
 
 					case 16: isShiftDown = false; break;
+					
 
 				}
 

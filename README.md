@@ -1,6 +1,6 @@
-# The Corridor Board Game
+# The Quoridor Board Game
 
-### ThreeJs
+### with [ThreeJs](https://www.threejs.org)
 
 ## Setup and run
 ``` bash

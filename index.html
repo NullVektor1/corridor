@@ -1,321 +1,357 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<title>three.js webgl - interactive - voxel painter</title>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-		<link type="text/css" rel="stylesheet" href="main.css">
-		<style>
-			body {
-				background-color: #f0f0f0;
-				color: #444;
+
+<head>
+	<title>three.js webgl - interactive - voxel painter</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+	<style>
+		body {
+			background-color: #f0f0f0;
+			color: #444;
+		}
+
+		a {
+			color: #08f;
+		}
+	</style>
+</head>
+
+<body>
+
+	<div id="info">
+		<h1>The Quoridor </h1>
+		<h3>by Oszi</h3>
+		<strong>click</strong>: add wall, <strong>Press R </strong>: rotate wall
+	</div>
+
+	<script type="module">
+
+		import * as THREE from '/js/three2.module.js';
+
+		let camera, scene, renderer;
+		let plane;
+		let pointer, raycaster, raycaster2, isRotated, isShiftDown = false;
+		let flag = false;
+		let rollOverGeo, rollOverMesh, rollOverMaterial;
+		let cubeGeo, cubeMaterial;
+		let wallPlaceLocationGeom, wallPlaceMesh;
+
+		const objects = [];
+		const walls = [];
+
+
+		let players = [];
+		class Player {
+			constructor(id, playerObj, avaibleWalls) {
+				this.id = id;
+				this.playerObj = playerObj;
+				this.avaibleWalls = avaibleWalls;
+
 			}
-			a {
-				color: #08f;
+			showPossibleMoves() {
+				const possibleMoveGeo = new THREE.BoxBufferGeometry(100, 5, 100);
+				possibleMoveGeo.translate(0, 0, 0)
+				const possibleMoveMaterial = new THREE.MeshBasicMaterial({ color: 0x1b6612, opacity: 0.6, transparent: true });
+				const possibleMoveMesh = new THREE.Mesh(possibleMoveGeo, possibleMoveMaterial);
+				scene.add(possibleMoveMesh)
+				//TODO check the Possible Moving options and render them
 			}
-		</style>
-	</head>
-	<body>
+		}
 
-		<div id="info">
-			<h1>The Corridor </h1>
-			<h3>by Oszi</h3>
-			<strong>click</strong>: add wall, <strong>shift + click</strong>: remove wall
-		</div>
 
-		<script type="module">
+		init();
+		render();
 
-			import * as THREE from '/js/three2.module.js';
+		function init() {
 
-			let camera, scene, renderer;
-			let plane;
-			let pointer ,raycaster,raycaster2, isRotated ,isShiftDown = false;
-			let flag = false;
-			let rollOverGeo, rollOverMesh, rollOverMaterial;
-			let cubeGeo, cubeMaterial;
-			let wallPlaceLocationGeom , wallPlaceMesh;
 
-			const objects = [];
-			const walls = [];
-			
+			//Scene initialization
+			camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
+			camera.position.set(500, 800, 1400);
+			camera.lookAt(0, 0, 0);
 
-			init();
+			scene = new THREE.Scene();
+			scene.background = new THREE.Color(0xf0f0f0);
+
+			// roll-over helpers
+			rollOverGeo = new THREE.BoxBufferGeometry(249, 51, 49);
+			rollOverGeo.translate(0, 0, 0)
+			rollOverMaterial = new THREE.MeshBasicMaterial({ color: 0x1b6612, opacity: 0.6, transparent: true });
+			rollOverMesh = new THREE.Mesh(rollOverGeo, rollOverMaterial);
+			scene.add(rollOverMesh);
+
+			// cubes
+			cubeGeo = new THREE.BoxBufferGeometry(250, 50, 50);
+			cubeGeo.translate(0, 0, 0)
+			cubeMaterial = new THREE.MeshLambertMaterial({ color: 0xfeb74c, map: new THREE.TextureLoader().load('text1.jpg') });
+
+			// grid
+			const gridHelper = new THREE.GridHelper(1300, 26);
+			scene.add(gridHelper);
+
+
+			raycaster = new THREE.Raycaster();
+			raycaster2 = new THREE.Raycaster();
+			pointer = new THREE.Vector2();
+
+			//plane
+			const geometry = new THREE.PlaneGeometry(1300, 1300);
+			geometry.rotateX(- Math.PI / 2);
+			plane = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ visible: false }));
+			scene.add(plane);
+
+			// lights
+			const ambientLight = new THREE.AmbientLight(0x606060);
+			scene.add(ambientLight);
+
+			const directionalLight = new THREE.DirectionalLight(0xffffff);
+			directionalLight.position.set(1, 0.75, 0.5).normalize();
+			scene.add(directionalLight);
+
+			//rendering
+			renderer = new THREE.WebGLRenderer({ antialias: true });
+			renderer.setPixelRatio(window.devicePixelRatio);
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			document.body.appendChild(renderer.domElement);
+
+			//document.addEventListener( 'mouseover' , mouseOver);
+			document.addEventListener('pointermove', onPointerMove);
+			document.addEventListener('pointerdown', onPointerDown);
+			document.addEventListener('keydown', onDocumentKeyDown);
+			document.addEventListener('keyup', onDocumentKeyUp);
+
+			//
+
+			window.addEventListener('resize', onWindowResize);
+						
+			createField(geometry);
+			addPlayers();
+
+		}
+
+		// function mouseOver(event){
+		// 	console.log(event);
+
+		// };
+
+		function onWindowResize() {
+
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			renderer.setSize(window.innerWidth, window.innerHeight);
+
 			render();
 
-			function init() {
+		}
 
-				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
-				camera.position.set( 500, 800, 1400 );
-				camera.lookAt( 0, 0, 0 );
-
-				scene = new THREE.Scene();
-				scene.background = new THREE.Color( 0xf0f0f0 );
-
-				// roll-over helpers
-
-				rollOverGeo = new THREE.BoxBufferGeometry( 249, 51, 49 );
-				//Set the geometric center of the wall
-				rollOverGeo.translate(0, 0, 0)
-
-				rollOverMaterial = new THREE.MeshBasicMaterial( { color: 0x1b6612, opacity: 0.6, transparent: true } );
-				rollOverMesh = new THREE.Mesh( rollOverGeo, rollOverMaterial );
-				scene.add( rollOverMesh );
-					
-				// /if(!flag)rollOverMesh.material.color.setHex("#1aff00");
-				// cubes
-
-				cubeGeo = new THREE.BoxBufferGeometry( 250, 50, 50 );
-				cubeGeo.translate(0, 0, 0)
-				cubeMaterial = new THREE.MeshLambertMaterial( { color: 0xfeb74c, map: new THREE.TextureLoader().load( 'text1.jpg' ) } );
-
-				// grid
-
-				const gridHelper = new THREE.GridHelper( 1300, 26 );
-				scene.add( gridHelper );
-
-
-				raycaster = new THREE.Raycaster();
-				raycaster2 = new THREE.Raycaster();
-				pointer = new THREE.Vector2();
-
-				const geometry = new THREE.PlaneGeometry( 1300, 1300 );
-				geometry.rotateX( - Math.PI / 2 );
-				plane = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { visible: false } ) );
-				scene.add( plane );
-
-				//objects.push( plane );
-				createField(geometry);
-
-				// lights
-
-				const ambientLight = new THREE.AmbientLight( 0x606060 );
-				scene.add( ambientLight );
-
-				const directionalLight = new THREE.DirectionalLight( 0xffffff );
-				directionalLight.position.set( 1, 0.75, 0.5 ).normalize();
-				scene.add( directionalLight );
-
-				renderer = new THREE.WebGLRenderer( { antialias: true } );
-				renderer.setPixelRatio( window.devicePixelRatio );
-				renderer.setSize( window.innerWidth, window.innerHeight );
-				document.body.appendChild( renderer.domElement );
-
-				//document.addEventListener( 'mouseover' , mouseOver);
-				document.addEventListener( 'pointermove', onPointerMove );
-				document.addEventListener( 'pointerdown', onPointerDown );
-				document.addEventListener( 'keydown', onDocumentKeyDown );
-				document.addEventListener( 'keyup', onDocumentKeyUp );
-
-				//
-
-				window.addEventListener( 'resize', onWindowResize );
-
-			}
-
-			// function mouseOver(event){
-			// 	console.log(event);
-
-			// };
-
-			function onWindowResize() {
-
-				camera.aspect = window.innerWidth / window.innerHeight;
-				camera.updateProjectionMatrix();
-
-				renderer.setSize( window.innerWidth, window.innerHeight );
-
-				render();
-
-			}
-
-			function createField(plane){
-				let xDistance = plane.parameters.width/26;
-				let yDistance = plane.parameters.height/26;
-				let xOffset = 13*50 ;
-				let yOffset = 11*50;
-				for(let i = 0; i < (plane.parameters.height)/50 ; i+=3 ){
-					for (let j =0 ; j < (plane.parameters.width)/50 ; j+=3){
-						let currentPlane = new THREE.PlaneGeometry(xDistance *2,yDistance*2); 
-						wallPlaceLocationGeom = new THREE.PlaneGeometry(xDistance, yDistance);
-						currentPlane.translate(50,50,0);
-						wallPlaceLocationGeom.translate(125,-25,0);
-						let currentMaterial = new THREE.MeshBasicMaterial( { color: 0xa6530a, opacity: 0.5, transparent: true } );
-						let wallPlaceMaterial = new THREE.MeshBasicMaterial( { color: 0xa2f30a, opacity: 1, visible: false });
-						wallPlaceMesh =new THREE.Mesh(wallPlaceLocationGeom,wallPlaceMaterial);
-						let currentMesh = new THREE.Mesh(currentPlane,currentMaterial);
-						currentMesh.position.x = (xDistance * i)-xOffset ;
-						wallPlaceMesh.position.x = (xDistance * i)-xOffset;
-						currentMesh.rotateX( - Math.PI / 2 );
-						wallPlaceMesh.rotateX( - Math.PI / 2);
-						currentMesh.position.z = (yDistance * j) -yOffset;
-						wallPlaceMesh.position.z = (yDistance * j) -yOffset;
-						scene.add(currentMesh);
-						if (i < (plane.parameters.height/50)-2 && j < (plane.parameters.height/50)-2)
-							{	objects.push(wallPlaceMesh)
-								scene.add(wallPlaceMesh)}
+		function createField(plane) {
+			let xDistance = plane.parameters.width / 26;
+			let yDistance = plane.parameters.height / 26;
+			let xOffset = 13 * 50;
+			let yOffset = 11 * 50;
+			for (let i = 0; i < (plane.parameters.height) / 50; i += 3) {
+				for (let j = 0; j < (plane.parameters.width) / 50; j += 3) {
+					let currentPlane = new THREE.PlaneGeometry(xDistance * 2, yDistance * 2);
+					wallPlaceLocationGeom = new THREE.PlaneGeometry(xDistance, yDistance);
+					currentPlane.translate(50, 50, 0);
+					wallPlaceLocationGeom.translate(125, -25, 0);
+					let currentMaterial = new THREE.MeshBasicMaterial({ color: 0xa6530a, opacity: 0.5, transparent: true });
+					let wallPlaceMaterial = new THREE.MeshBasicMaterial({ color: 0xa2f30a, opacity: 1, visible: false });
+					wallPlaceMesh = new THREE.Mesh(wallPlaceLocationGeom, wallPlaceMaterial);
+					let currentMesh = new THREE.Mesh(currentPlane, currentMaterial);
+					currentMesh.position.x = (xDistance * i) - xOffset;
+					wallPlaceMesh.position.x = (xDistance * i) - xOffset;
+					currentMesh.rotateX(- Math.PI / 2);
+					wallPlaceMesh.rotateX(- Math.PI / 2);
+					currentMesh.position.z = (yDistance * j) - yOffset;
+					wallPlaceMesh.position.z = (yDistance * j) - yOffset;
+					scene.add(currentMesh);
+					if (i < (plane.parameters.height / 50) - 2 && j < (plane.parameters.height / 50) - 2) {
+						objects.push(wallPlaceMesh)
+						scene.add(wallPlaceMesh)
 					}
 				}
-
 			}
-
-			function onPointerMove( event ) {
-
-				pointer.set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
-
-				raycaster.setFromCamera( pointer, camera );
-				//raycaster2.set()
-				const intersects = raycaster.intersectObjects( objects, false );
-				const wallIntersects = raycaster.intersectObjects(walls, false );
-				//Rajta van vagy sem
-				if ( intersects.length > 0 ) {
-					
-					const intersect = intersects[ 0 ];
-					intersect.point.y = Math.abs(intersect.point.y)
-					rollOverMesh.position.copy( intersect.point ).add( intersect.face.normal );
-					//rogziti a poziciot ahova az elemet tenni lehet
-					//console.log(rollOverMesh.position.copy( intersect.point ).add( intersect.face.normal ));
-					rollOverMesh.position.divideScalar( 50 ).floor().multiplyScalar( 50 ).addScalar( 25 );
-					//Check if intersected by other elements
-					
-					checkPlaceability();
-					scene.add(rollOverMesh)
-					//console.log(rollOverMesh)
-
-					
-				}
-				else scene.remove(rollOverMesh); 
-				render();
-
-			}
-
-			function onPointerDown( event ) {
-
-				pointer.set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
-
-				raycaster.setFromCamera( pointer, camera );
-
-				const intersects = raycaster.intersectObjects( objects, false );
-				if ( intersects.length > 0 && !flag) {
-
-					const intersect = intersects[ 0 ];
-					const voxel = new THREE.Mesh( cubeGeo, cubeMaterial );
-
-					intersect.point.y = Math.abs(intersect.point.y)
-					// delete cube
-
-					if ( isShiftDown ) {
-
-						if ( intersect.object !== plane ) {
-
-							scene.remove( intersect.object );
-
-							objects.splice( objects.indexOf( intersect.object ), 1 );
-
-						}
-
-						// create cube
-
-					} else if(isRotated){
-						voxel.rotateY(-(Math.PI/2))
-						voxel.position.copy( intersect.point ).add( intersect.face.normal );
-						voxel.position.divideScalar( 50 ).floor().multiplyScalar( 50 ).addScalar( 25 );
-						scene.add( voxel );
-						walls.push(voxel);
-						//objects.push( voxel );
-
-					}
-					
-					else {
-						voxel.position.copy( intersect.point ).add( intersect.face.normal );
-						voxel.position.divideScalar( 50 ).floor().multiplyScalar( 50 ).addScalar( 25 );
-						scene.add( voxel );
-						walls.push(voxel);
-
-
-						//objects.push( voxel );
-
-					}
-					objects.splice( objects.indexOf( intersect.object ), 1 );
-					console.log (flag);
-					render();
-
-				}
-
-			}
-
-			function onDocumentKeyDown( event ) {
-
-				switch ( event.keyCode ) {
-
-					case 16: isShiftDown = true; break;
-					//R key detection to rotate
-					case 82: if(isRotated){
-								rollOverMesh.rotateY(Math.PI/2);
-								isRotated = false;
-								}
-							else{
-								isRotated = true;
-								rollOverMesh.rotateY(-(Math.PI/2))
-							}
-							checkPlaceability();
-							render();
-							break;
-
-				}
-
-			}
-
-			function onDocumentKeyUp( event ) {
-
-				switch ( event.keyCode ) {
-
-					case 16: isShiftDown = false; break;
-					
-
-				}
-
-			}
-
-			function render() {
-
-				renderer.render( scene, camera );
-
-			}
-			function detectCollisionCubes(object1, object2){
-					object1.geometry.computeBoundingBox();
-					object2.geometry.computeBoundingBox();
-					object1.updateMatrixWorld();
-					object2.updateMatrixWorld();
-					var box1 = object1.geometry.boundingBox.clone();
-					box1.applyMatrix4(object1.matrixWorld);
-					var box2 = object2.geometry.boundingBox.clone();
-					box2.applyMatrix4(object2.matrixWorld);
-					console.log("1:",box1 ,"2:",box2);
-					return box1.intersectsBox(box2);
-					}
-			
-			function checkPlaceability(){
-				for (let i =0 ;i < walls.length;i++){
-					 let check = (detectCollisionCubes(walls[i],rollOverMesh));
-						if (check ==true){
-							//console.log(flag," on wall number:",i)
-							flag = true;
-							console.log(flag)
-							
-							break;
-							}else
-							flag = false;
 
 		}
 
-			if(flag)
-			rollOverMesh.material.color.setHex("0xff0000")
-				else
+		function onPointerMove(event) {
+
+			pointer.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
+
+			raycaster.setFromCamera(pointer, camera);
+			//raycaster2.set()
+			const intersects = raycaster.intersectObjects(objects, false);
+			const wallIntersects = raycaster.intersectObjects(walls, false);
+			//Rajta van vagy sem
+			if (intersects.length > 0) {
+
+				const intersect = intersects[0];
+				intersect.point.y = Math.abs(intersect.point.y)
+				rollOverMesh.position.copy(intersect.point).add(intersect.face.normal);
+				//rogziti a poziciot ahova az elemet tenni lehet
+				//console.log(rollOverMesh.position.copy( intersect.point ).add( intersect.face.normal ));
+				rollOverMesh.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+				//Check if intersected by other elements
+
+				checkPlaceability();
+				scene.add(rollOverMesh)
+				//console.log(rollOverMesh)
+
+
+			}
+			else scene.remove(rollOverMesh);
+			render();
+
+		}
+
+		function onPointerDown(event) {
+
+			pointer.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
+
+			raycaster.setFromCamera(pointer, camera);
+
+			const intersects = raycaster.intersectObjects(objects, false);
+			if (intersects.length > 0 && !flag) {
+
+				const intersect = intersects[0];
+				const voxel = new THREE.Mesh(cubeGeo, cubeMaterial);
+
+				intersect.point.y = Math.abs(intersect.point.y)
+				// delete cube
+
+				if (isShiftDown) {
+
+					if (intersect.object !== plane) {
+
+						scene.remove(intersect.object);
+
+						objects.splice(objects.indexOf(intersect.object), 1);
+
+					}
+
+					// create cube
+
+				} else if (isRotated) {
+					voxel.rotateY(-(Math.PI / 2))
+					voxel.position.copy(intersect.point).add(intersect.face.normal);
+					voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+					scene.add(voxel);
+					walls.push(voxel);
+					//objects.push( voxel );
+
+				}
+
+				else {
+					voxel.position.copy(intersect.point).add(intersect.face.normal);
+					voxel.position.divideScalar(50).floor().multiplyScalar(50).addScalar(25);
+					scene.add(voxel);
+					walls.push(voxel);
+
+
+					//objects.push( voxel );
+
+				}
+				objects.splice(objects.indexOf(intersect.object), 1);
+				console.log(objects);
+				render();
+
+			}
+
+		}
+
+		function onDocumentKeyDown(event) {
+
+			switch (event.keyCode) {
+
+				case 16: isShiftDown = true; break;
+				//R key detection to rotate
+				case 82: if (isRotated) {
+					rollOverMesh.rotateY(Math.PI / 2);
+					isRotated = false;
+				}
+				else {
+					isRotated = true;
+					rollOverMesh.rotateY(-(Math.PI / 2))
+				}
+					checkPlaceability();
+					render();
+					break;
+
+			}
+
+		}
+
+		function onDocumentKeyUp(event) {
+
+			switch (event.keyCode) {
+
+				case 16: isShiftDown = false; break;
+
+
+			}
+
+		}
+
+		function render() {
+
+			renderer.render(scene, camera);
+
+		}
+		function detectCollisionCubes(object1, object2) {
+			object1.geometry.computeBoundingBox();
+			object2.geometry.computeBoundingBox();
+			object1.updateMatrixWorld();
+			object2.updateMatrixWorld();
+			var box1 = object1.geometry.boundingBox.clone();
+			box1.applyMatrix4(object1.matrixWorld);
+			var box2 = object2.geometry.boundingBox.clone();
+			box2.applyMatrix4(object2.matrixWorld);
+			//console.log("1:",box1 ,"2:",box2);
+			return box1.intersectsBox(box2);
+		}
+
+		function checkPlaceability() {
+			for (let i = 0; i < walls.length; i++) {
+				let check = (detectCollisionCubes(walls[i], rollOverMesh));
+				if (check == true) {
+					//console.log(flag," on wall number:",i)
+					flag = true;
+					//	console.log(flag)
+
+					break;
+				} else
+					flag = false;
+
+			}
+
+			if (flag)
+				rollOverMesh.material.color.setHex("0xff0000")
+			else
 				rollOverMesh.material.color.setHex("0x1b6612")
 		}
-			
 
-		</script>
+		function addPlayers() {
+			const playerGeometry = new THREE.SphereGeometry(50, 32, 16);
+			const playerMaterial = new THREE.MeshBasicMaterial({ color: 0xc8c800 });
+			const playerObj = new THREE.Mesh(playerGeometry, playerMaterial);
+			playerObj.position.z = 600;
+			playerObj.position.y = 50;
 
-	</body>
+			const player = new Player(1, playerObj, 5);
+			players.push(player);
+			scene.add(playerObj);
+			console.log(players[0])
+			players[0].showPossibleMoves();
+			// 	for (let i = 0 ; i<playerNumber;i++){
+
+		}
+			// }
+	</script>
+
+</body>
+
 </html>
